@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Downloaded by setup.ps1 (~350 MB)
+models/
+
+# Personal / runtime data
+jarvis.log
+notes.txt
