@@ -35,6 +35,9 @@ VOICE = "af_bella"          # Others: af_heart, bf_emma (en-gb), am_michael, am_
 VOICE_LANG = "en-us"        # must match the voice: en-us for a*_ voices, en-gb for b*_ voices
 VOICE_SPEED = 1.0
 
+# --- Idle mode ---
+IDLE_AFTER_MINUTES = 10     # unload models from the GPU after this long unused; 0 = never
+
 # --- Hotkey (works anywhere, same as clicking the orb) ---
 HOTKEY = "ctrl+alt+j"       # modifiers: ctrl, alt, shift, win; key: a-z, 0-9, f1-f12, space
 
@@ -51,6 +54,9 @@ SPOTIFY_TOKEN_FILE = os.path.join(DATA_DIR, "spotify.bin")  # encrypted
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")  # home city, Spotify client ID
 NOTES_FILE = os.path.join(DATA_DIR, "notes.txt")
 LOG_FILE = os.path.join(DATA_DIR, "jarvis.log")
+# The log is plain text. Off: it records events and timings only, never what was said,
+# read or written. Turn on temporarily when debugging a misheard or misrouted request.
+LOG_CONVERSATIONS = False
 
 # --- Screen understanding ---
 VISION_MODEL = "qwen3-vl:4b"   # loaded only when asked to look, then unloaded

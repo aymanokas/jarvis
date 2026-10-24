@@ -20,6 +20,7 @@ COLORS = {
     "speaking": "#00d9ff",
     "muted": "#ff4d5e",
     "error": "#ff4d5e",
+    "sleeping": "#4a5f86",
 }
 STATUS_TEXT = {
     "loading": "STARTING UP",
@@ -29,8 +30,10 @@ STATUS_TEXT = {
     "speaking": "JARVIS",
     "muted": "WAKE WORD PAUSED",
     "error": "STARTUP FAILED - SEE jarvis.log",
+    "sleeping": "SLEEPING",
 }
-SPIN_SPEED = {"thinking": 7.0, "listening": 2.0, "speaking": 2.5, "loading": 4.0}  # degrees per frame
+SPIN_SPEED = {"thinking": 7.0, "listening": 2.0, "speaking": 2.5, "loading": 4.0, "sleeping": 0.0}  # degrees per frame
+QUIET_STATES = ("idle", "sleeping")  # nothing happening: the card fades out after a while
 
 ORB_SIZE = 132   # widget size, including room for the glow
 CARD_WIDTH = 340
@@ -86,6 +89,11 @@ class Orb(QWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.timer.start(16)
+
+    def set_sleeping(self, sleeping):
+        """Dim and slow down (10 fps) so the overlay costs almost nothing while asleep."""
+        self.timer.setInterval(100 if sleeping else 16)
+        self.setWindowOpacity(0.55 if sleeping else 1.0)
 
     def _tick(self):
         self.color = _lerp_color(self.color, QColor(COLORS[self.state]), 0.12)
@@ -396,15 +404,16 @@ class Overlay:
         self._on_click()
 
     def set_state(self, state):
-        if state == "listening" and self.state == "idle":  # new conversation: clear the old one
+        if state == "listening" and self.state in QUIET_STATES:  # new conversation: clear the old one
             self._reply_text = ""
             self.card.set_text(you="", reply="")
         self.state = state
         shown = "muted" if self.paused and state == "idle" else state
         self.orb.state = shown
+        self.orb.set_sleeping(shown == "sleeping")
         self.card.set_status(STATUS_TEXT[shown], COLORS[shown])
         self.tray.setToolTip(f"JARVIS - {shown}")
-        if state == "idle":
+        if state in QUIET_STATES:
             if self.card.isVisible():
                 self.linger.start()
         elif state != "muted":
@@ -416,7 +425,7 @@ class Overlay:
                 self.card.fade_in()
             if state == "error":
                 self.linger.start()
-        if state == "idle" and self._reply_text == "" and not self.card.you.text():
+        if state in QUIET_STATES and self._reply_text == "" and not self.card.you.text():
             self.card.fade_out()
 
     def _on_notice(self, title, text):

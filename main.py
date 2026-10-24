@@ -49,7 +49,10 @@ class Jarvis:
         self.ui = None  # Bridge, set once the overlay exists
         self.muted = False
         self.trigger = threading.Event()  # set when the orb is clicked
+        self.sleep_request = threading.Event()  # "Sleep now" from the menu
         self.mic = self.tts = None
+        self.asleep = False
+        self.last_used = time.time()
 
     def set_state(self, state):
         self.ui.state.emit(state)
@@ -102,8 +105,40 @@ class Jarvis:
                 triggered = self.wake.detect(chunk)
             if triggered:
                 self.wake.reset()
+                if self.asleep:
+                    self.wake_up()
                 self.conversation()
-                self.set_state("idle")
+                self.last_used = time.time()
+                self.set_state("sleeping" if self.asleep else "idle")
+            elif not self.asleep and (self.sleep_request.is_set() or self._idle_too_long()):
+                self.go_to_sleep()
+            self.sleep_request.clear()
+
+    # --- idle mode: models leave the GPU; the wake word, voice and reminders keep working
+
+    def _idle_too_long(self):
+        limit = config.IDLE_AFTER_MINUTES * 60
+        return limit > 0 and time.time() - self.last_used > limit and not self.tts.busy()
+
+    def go_to_sleep(self):
+        log.info("Going to sleep: unloading models from the GPU")
+        self.asleep = True
+        self.set_state("sleeping")
+        self.brain.unload()
+        self.stt.unload()
+
+    def wake_up(self):
+        """Reload both models in parallel, in the background, while the user is still talking."""
+        log.info("Waking up: reloading models")
+        self.asleep = False
+        t0 = time.time()
+        threading.Thread(target=self.stt.load, daemon=True, name="wake-stt").start()
+
+        def reload_llm():
+            self.brain.warm_up()
+            log.info("Models reloaded in %.1fs", time.time() - t0)
+
+        threading.Thread(target=reload_llm, daemon=True, name="wake-llm").start()
 
     def conversation(self):
         timeout = config.START_TIMEOUT
@@ -120,7 +155,8 @@ class Jarvis:
             text = self.stt.transcribe(recording)
             if not text:
                 return
-            log.info("you: %s  (stt %.2fs)", text, time.time() - t0)
+            log.info("you: %s  (stt %.2fs)", text if config.LOG_CONVERSATIONS else f"({len(text)} chars)",
+                     time.time() - t0)
             self.ui.user.emit(text)
 
             interrupted = self.respond(text)
@@ -248,7 +284,8 @@ def main():
                       autostart_enabled=autostart.is_enabled(), on_autostart_toggle=on_autostart,
                       on_clear_memory=tools.memory.clear,
                       hotkey_label=config.HOTKEY.title() if hotkey_ok else "",
-                      extra_actions=[("Connect Spotify...", lambda: connect_spotify(overlay.bridge)),
+                      extra_actions=[("Sleep now", jarvis.sleep_request.set),
+                                     ("Connect Spotify...", lambda: connect_spotify(overlay.bridge)),
                                      ("Set home city...", lambda: set_home_city(overlay.bridge))])
     jarvis.ui = overlay.bridge
     threading.Thread(target=jarvis.run, daemon=True).start()

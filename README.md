@@ -92,6 +92,16 @@ log. To launch it at sign-in, right-click the orb and tick **Start with Windows*
   as data rather than instructions. Clear it any time with **Clear memory...** in the tray menu.
 - **Personal data stays out of the repo.** Memory, notes and logs live in
   `%LOCALAPPDATA%\Jarvis`, not the project folder. The log rotates at 1 MB.
+- **The log contains no conversations.** By default it records events and timings only.
+  What JARVIS reads (clipboard, files, screen) is never logged, even with
+  `LOG_CONVERSATIONS = True` turned on for debugging.
+- **Outside content doesn't linger.** Web, screen, clipboard and file contents are removed from
+  the conversation history as soon as the request that read them finishes, so planted
+  instructions can't influence a later request.
+- **Apps close safely.** "Close Word" closes it like clicking X, so unsaved work triggers the
+  usual save prompt. Force-closing only happens if you explicitly ask for it.
+- **Idle mode** unloads the models from the GPU after 10 minutes unused (`IDLE_AFTER_MINUTES`).
+  The wake word, hotkey and reminders keep working, and models reload while you speak.
 - **The hotkey uses `RegisterHotKey`**, so Windows only reports that one key combination.
   JARVIS never sees anything else you type (unlike keyboard-hook libraries).
 - **Autostart** is a per-user registry entry (no admin rights) with fully quoted paths, and

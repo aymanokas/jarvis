@@ -74,6 +74,7 @@ def _start_ollama():
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+|\n+")
 # Closing filler the small model keeps adding despite the prompt; dropped before speaking.
 FILLER = re.compile(r"^(let me know\b|feel free\b|need anything else|anything else\b|is there anything|"
+                    r"if you need anything|have a great day|"
                     r"want me to\b.*\?$|would you like (me to )?\b.*\?$|what'?s next\??$|enjoy!?$)", re.I)
 MIN_CHUNK = 40  # characters; shorter sentences wait to be spoken with the next one
 
@@ -103,14 +104,27 @@ class Brain:
                 log.info("Waiting for Ollama to start...")
                 time.sleep(3)
 
+    def unload(self):
+        """Frees the model's GPU memory while JARVIS sleeps."""
+        try:
+            self.client.generate(model=config.OLLAMA_MODEL, keep_alive=0)
+        except Exception as e:
+            log.warning("Couldn't unload %s: %s", config.OLLAMA_MODEL, e)
+
     def _system(self):
         now = datetime.datetime.now().strftime("%A, %B %d %Y, %I:%M %p (%Y-%m-%d %H:%M)")
         return {"role": "system", "content": SYSTEM_PROMPT.format(now=now, memory=tools.memory.prompt_block())}
 
     def _trim(self):
-        # Documents and web results are only needed for the request that fetched them.
+        # Outside content is only needed for the request that fetched it. Removing it stops a
+        # planted instruction from carrying over into the next request, where actions aren't
+        # blocked anymore. JARVIS's own answer stays, so follow-up questions still work.
         for m in self.history:
-            if m["role"] == "tool" and len(m["content"]) > 400:
+            if m["role"] != "tool":
+                continue
+            if m.get("tool_name") in tools.UNTRUSTED:
+                m["content"] = "[Outside content removed after use. See your previous answer.]"
+            elif len(m["content"]) > 400:
                 m["content"] = m["content"][:400] + " [trimmed]"
         if len(self.history) <= config.MAX_HISTORY:
             return
@@ -158,7 +172,7 @@ class Brain:
             self.history.append({"role": "assistant", "content": content,
                                  "tool_calls": [c.model_dump() for c in calls] or None})
             if content.strip():
-                log.info("jarvis: %s", content.strip())
+                log.info("jarvis: %s", content.strip() if config.LOG_CONVERSATIONS else f"({len(content.strip())} chars)")
             if cancel.is_set() or not calls:
                 break
             direct = []

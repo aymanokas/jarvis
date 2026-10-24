@@ -92,7 +92,7 @@ class Reminders:
                 if fired:
                     self._save()
             for text in fired:
-                log.info("reminder fired: %s", text)
+                log.info("reminder fired")
                 self.on_fire(f"Reminder: {text}")
 
     def add(self, text, when, repeat="none"):

@@ -1,7 +1,9 @@
 """Speech-to-text with faster-whisper (GPU if available, else CPU)."""
+import gc
 import logging
 import os
 import sys
+import threading
 
 import numpy as np
 
@@ -39,17 +41,32 @@ def _load(**kwargs):
 
 class STT:
     def __init__(self):
-        try:
-            self.model = _load(device="cuda", compute_type="float16")
-            list(self.model.transcribe(np.zeros(config.SAMPLE_RATE, np.float32))[0])  # forces cuDNN load
-            self.device = "cuda"
-        except Exception as e:
-            log.warning("GPU whisper unavailable (%s), using CPU", e)
-            self.model = _load(device="cpu", compute_type="int8", cpu_threads=8)
-            self.device = "cpu"
-        log.info("Whisper %s loaded on %s", config.WHISPER_MODEL, self.device)
+        self.model = None
+        self._lock = threading.Lock()
+        self.load()
+
+    def load(self):
+        with self._lock:
+            if self.model is not None:
+                return
+            try:
+                self.model = _load(device="cuda", compute_type="float16")
+                list(self.model.transcribe(np.zeros(config.SAMPLE_RATE, np.float32))[0])  # forces cuDNN load
+                self.device = "cuda"
+            except Exception as e:
+                log.warning("GPU whisper unavailable (%s), using CPU", e)
+                self.model = _load(device="cpu", compute_type="int8", cpu_threads=8)
+                self.device = "cpu"
+            log.info("Whisper %s loaded on %s", config.WHISPER_MODEL, self.device)
+
+    def unload(self):
+        """Frees GPU memory while JARVIS sleeps."""
+        with self._lock:
+            self.model = None
+        gc.collect()
 
     def transcribe(self, audio):
+        self.load()  # no-op unless asleep; waits if a wake-up reload is in progress
         segments, _ = self.model.transcribe(
             audio, language="en", beam_size=3, vad_filter=True,
             condition_on_previous_text=False,
