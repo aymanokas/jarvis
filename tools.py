@@ -18,9 +18,12 @@ import webbrowser
 import psutil
 
 import config
+from memory import Memory
 
 log = logging.getLogger("jarvis.tools")
 NO_WINDOW = subprocess.CREATE_NO_WINDOW
+
+memory = Memory(config.MEMORY_FILE)
 
 # Set by main so timers can speak when they fire.
 notify = lambda text: None  # noqa: E731
@@ -242,6 +245,9 @@ def set_timer(seconds: int, label: str = "timer") -> str:
         label: Short name for the timer, e.g. "pasta".
     """
     seconds = int(seconds)
+    if not 1 <= seconds <= 24 * 3600:
+        return "Timers can be between one second and twenty-four hours."
+    label = " ".join(str(label).split())[:40] or "timer"
     threading.Timer(seconds, lambda: notify(f"Your {label} timer is done.")).start()
     mins, secs = divmod(seconds, 60)
     span = f"{mins} minute{'s' * (mins != 1)}" if mins else ""
@@ -259,6 +265,25 @@ def take_note(text: str) -> str:
     with open(config.NOTES_FILE, "a", encoding="utf-8") as f:
         f.write(f"[{stamp}] {text}\n")
     return "Noted."
+
+
+def remember(fact: str) -> str:
+    """Save a lasting fact about the user to long-term memory. Only use when the user
+    explicitly asks you to remember something.
+
+    Args:
+        fact: The fact as a short standalone sentence, e.g. "The user's sister's birthday is March 3rd".
+    """
+    return memory.add(fact)
+
+
+def forget(fact: str) -> str:
+    """Remove something from long-term memory when the user asks you to forget it.
+
+    Args:
+        fact: Words describing the memory to remove, e.g. "sister's birthday".
+    """
+    return memory.remove(fact)
 
 
 def get_system_status() -> str:
@@ -288,8 +313,8 @@ def lock_computer() -> str:
 
 
 TOOLS = [open_app, close_app, open_website, search_web, play_youtube, media_control,
-         set_volume, adjust_volume, mute_audio, set_timer, take_note, get_system_status,
-         lock_computer]
+         set_volume, adjust_volume, mute_audio, set_timer, take_note, remember, forget,
+         get_system_status, lock_computer]
 TOOL_MAP = {f.__name__: f for f in TOOLS}
 
 

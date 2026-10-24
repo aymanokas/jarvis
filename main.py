@@ -4,7 +4,9 @@ Flow: wake word -> record until silence -> Whisper -> Qwen (with tools) -> Kokor
 After replying it listens a few more seconds for a follow-up without the wake word.
 Saying "Hey Jarvis" or clicking the orb while it's talking interrupts it.
 """
+import ctypes
 import logging
+import logging.handlers
 import os
 import sys
 import threading
@@ -12,13 +14,21 @@ import time
 
 import config
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(name)s: %(message)s", datefmt="%H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler(config.LOG_FILE, encoding="utf-8")],
-)
+# Under pythonw (no console) stdout/stderr are None, and libraries that print would crash.
+if sys.stdout is None or sys.stderr is None:
+    sys.stdout = sys.stderr = open(os.devnull, "w")
+
+handlers = [logging.handlers.RotatingFileHandler(config.LOG_FILE, maxBytes=1_000_000,
+                                                 backupCount=2, encoding="utf-8")]
+if sys.stdout.isatty():
+    handlers.append(logging.StreamHandler(sys.stdout))
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s",
+                    datefmt="%H:%M:%S", handlers=handlers)
 log = logging.getLogger("jarvis")
 
 import audio  # noqa: E402
+import autostart  # noqa: E402
+import hotkey  # noqa: E402
 import tools  # noqa: E402
 from brain import Brain  # noqa: E402
 from stt import STT  # noqa: E402
@@ -142,16 +152,35 @@ class Jarvis:
         return False
 
 
+def already_running():
+    """Named mutex so a second copy (e.g. autostart + manual launch) exits instead of
+    fighting over the microphone. Kept alive for the life of the process."""
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    main.mutex = kernel32.CreateMutexW(None, False, "Local\\JARVIS-assistant")
+    return ctypes.get_last_error() == 183  # ERROR_ALREADY_EXISTS
+
+
 def main():
     os.chdir(config.ROOT)
+    if already_running():
+        log.info("JARVIS is already running; exiting")
+        return
     jarvis = Jarvis()
 
     def on_pause(paused):
         jarvis.muted = paused
         log.info("wake word %s", "paused" if paused else "live")
 
+    def on_autostart(enabled):
+        autostart.set_enabled(enabled)
+        log.info("start with Windows %s", "on" if enabled else "off")
+
+    hotkey_ok = hotkey.start(config.HOTKEY, jarvis.trigger.set)
     overlay = Overlay(on_click=jarvis.trigger.set, on_pause_toggle=on_pause,
-                      on_quit=lambda: os._exit(0), level_fn=jarvis.level)
+                      on_quit=lambda: os._exit(0), level_fn=jarvis.level,
+                      autostart_enabled=autostart.is_enabled(), on_autostart_toggle=on_autostart,
+                      on_clear_memory=tools.memory.clear,
+                      hotkey_label=config.HOTKEY.title() if hotkey_ok else "")
     jarvis.ui = overlay.bridge
     threading.Thread(target=jarvis.run, daemon=True).start()
     sys.exit(overlay.run())

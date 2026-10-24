@@ -35,5 +35,16 @@ VOICE = "af_bella"          # Others: af_heart, bf_emma (en-gb), am_michael, am_
 VOICE_LANG = "en-us"        # must match the voice: en-us for a*_ voices, en-gb for b*_ voices
 VOICE_SPEED = 1.0
 
-NOTES_FILE = os.path.join(ROOT, "notes.txt")
-LOG_FILE = os.path.join(ROOT, "jarvis.log")
+# --- Hotkey (works anywhere, same as clicking the orb) ---
+HOTKEY = "ctrl+alt+j"       # modifiers: ctrl, alt, shift, win; key: a-z, 0-9, f1-f12, space
+
+# --- Memory ---
+MAX_MEMORIES = 100
+MAX_MEMORY_CHARS = 300
+
+# Personal data lives outside the repo so it can never be committed by accident.
+DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "Jarvis")
+os.makedirs(DATA_DIR, exist_ok=True)
+MEMORY_FILE = os.path.join(DATA_DIR, "memory.bin")   # encrypted with Windows DPAPI
+NOTES_FILE = os.path.join(DATA_DIR, "notes.txt")
+LOG_FILE = os.path.join(DATA_DIR, "jarvis.log")

@@ -1,4 +1,4 @@
 @echo off
+rem Starts JARVIS in the background (no console). Logs: %LOCALAPPDATA%\Jarvis\jarvis.log
 cd /d "%~dp0"
-".venv\Scripts\python.exe" main.py
-pause
+start "" ".venv\Scripts\pythonw.exe" main.py

@@ -9,7 +9,8 @@ import time
 
 from PySide6.QtCore import QObject, QPoint, QPointF, QPropertyAnimation, QRectF, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap, QRadialGradient
-from PySide6.QtWidgets import QApplication, QLabel, QMenu, QSystemTrayIcon, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QApplication, QLabel, QMenu, QMessageBox, QSystemTrayIcon,
+                               QVBoxLayout, QWidget)
 
 COLORS = {
     "loading": "#8a94a6",
@@ -72,7 +73,6 @@ class Orb(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setFixedSize(ORB_SIZE, ORB_SIZE)
         self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip("Click to talk · drag to move · right-click for options")
 
         self.state = "loading"
         self.color = QColor(COLORS["loading"])
@@ -248,11 +248,15 @@ class Card(QWidget):
 
 
 class Overlay:
-    def __init__(self, on_click, on_pause_toggle, on_quit, level_fn):
+    def __init__(self, on_click, on_pause_toggle, on_quit, level_fn,
+                 autostart_enabled, on_autostart_toggle, on_clear_memory, hotkey_label):
         self.app = QApplication.instance() or QApplication([])
         self.app.setQuitOnLastWindowClosed(False)
         self._on_click = on_click
         self._on_pause_toggle = on_pause_toggle
+        self._on_autostart_toggle = on_autostart_toggle
+        self._on_clear_memory = on_clear_memory
+        self._autostart_enabled = autostart_enabled
         self._level_fn = level_fn
         self.state = "loading"
         self.paused = False
@@ -265,6 +269,8 @@ class Overlay:
         self._reply_text = ""
 
         self.orb = Orb(self)
+        hint = f" ({hotkey_label})" if hotkey_label else ""
+        self.orb.setToolTip(f"Click to talk{hint} · drag to move · right-click for options")
         self.card = Card()
         self._build_menu(on_quit)
         self._build_tray()
@@ -292,13 +298,25 @@ class Overlay:
         self.show_action.toggled.connect(self._set_visible)
         self.pause_action = QAction("Pause wake word", checkable=True)
         self.pause_action.toggled.connect(self._set_paused)
+        autostart_action = QAction("Start with Windows", checkable=True, checked=self._autostart_enabled)
+        autostart_action.toggled.connect(self._on_autostart_toggle)
+        clear_action = QAction("Clear memory...")
+        clear_action.triggered.connect(self._confirm_clear_memory)
         quit_action = QAction("Quit JARVIS")
         quit_action.triggered.connect(on_quit)
-        for a in (self.show_action, self.pause_action):
+        for a in (self.show_action, self.pause_action, autostart_action):
             self.menu.addAction(a)
         self.menu.addSeparator()
+        self.menu.addAction(clear_action)
         self.menu.addAction(quit_action)
-        self._actions = (self.show_action, self.pause_action, quit_action)
+        self._actions = (self.show_action, self.pause_action, autostart_action, clear_action, quit_action)
+
+    def _confirm_clear_memory(self):
+        answer = QMessageBox.question(
+            None, "JARVIS", "Erase everything JARVIS remembers about you?\nThis can't be undone.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if answer == QMessageBox.Yes:
+            self._on_clear_memory()
 
     def _build_tray(self):
         pix = QPixmap(64, 64)

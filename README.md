@@ -9,8 +9,10 @@ accounts, no per-request costs. Say *"Hey Jarvis"* (or click the floating orb) a
 - Play/pause/skip media, set or adjust volume, mute
 - Timers that announce themselves, quick notes, system status (CPU, RAM, GPU)
 - Lock the PC
+- Long-term memory: "remember that my sister's birthday is March 3rd", "forget my coffee order"
 - General conversation, with follow-ups without repeating the wake word
-- Interrupt it mid-sentence by saying "Hey Jarvis" again or clicking the orb
+- Interrupt it mid-sentence by saying "Hey Jarvis" again, clicking the orb, or pressing **Ctrl+Alt+J**
+- Starts with Windows (optional, from the tray menu) and runs without a console window
 
 ## How it works
 
@@ -58,6 +60,27 @@ run.bat
 `setup.ps1` creates the virtual environment, downloads the voice and wake-word models, installs
 Ollama if needed and pulls `qwen3:8b`.
 
+`run.bat` starts JARVIS in the background. `debug.bat` runs it with a console showing the live
+log. To launch it at sign-in, right-click the orb and tick **Start with Windows**.
+
+## Privacy and security
+
+- **All AI runs locally.** Audio, transcripts and memories never leave your PC. Only the
+  web tools you ask for (search, YouTube, websites) use the internet.
+- **Memory is encrypted** with Windows DPAPI: only your Windows account on this PC can read it.
+  It's capped at 100 short facts, saved only when you explicitly ask, and passed to the model
+  as data rather than instructions. Clear it any time with **Clear memory...** in the tray menu.
+- **Personal data stays out of the repo.** Memory, notes and logs live in
+  `%LOCALAPPDATA%\Jarvis`, not the project folder. The log rotates at 1 MB.
+- **The hotkey uses `RegisterHotKey`**, so Windows only reports that one key combination.
+  JARVIS never sees anything else you type (unlike keyboard-hook libraries).
+- **Autostart** is a per-user registry entry (no admin rights) with fully quoted paths, and
+  a single-instance lock prevents duplicate copies.
+- **Guardrails on actions:** system processes can't be closed, and timers are limited to
+  24 hours.
+- Keep Ollama bound to `127.0.0.1` (its default). Don't set `OLLAMA_HOST=0.0.0.0`,
+  which would expose the model to your network.
+
 ## Configuration
 
 Everything lives in [`config.py`](config.py): wake-word sensitivity, silence timing, Whisper
@@ -74,6 +97,9 @@ brain.py    Ollama chat loop with streaming and tool calls
 tools.py    actions on the PC (each function is a tool the LLM can call)
 tts.py      Kokoro text-to-speech with pipelined synthesis/playback
 ui.py       floating overlay and tray icon
+memory.py   encrypted long-term memory
+hotkey.py   global push-to-talk hotkey
+autostart.py  start-with-Windows toggle
 config.py   settings
 ```
 

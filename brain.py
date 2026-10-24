@@ -2,6 +2,7 @@
 import datetime
 import logging
 import re
+import time
 
 import ollama
 
@@ -20,11 +21,19 @@ Your replies are spoken aloud, so write the way people actually talk:
 - Vary your phrasing. Don't start every reply the same way or repeat the user's words back.
 - Plain sentences only: no markdown, lists, emojis or URLs.
 - Write numbers, times and units the way they're said aloud ("ten minutes", "about half past three").
-- Don't end with filler like "anything else?" or "let me know if you need anything".
+- Don't end with filler like "anything else?", "what's next?" or "let me know if you need anything".
 
 When a request involves the computer, use your tools. Never claim you did something \
-without calling the tool. Afterwards confirm casually, like "Done, it's open" or "Ten minutes, \
+without calling the tool. Never offer to do things you have no tool for. Afterwards confirm casually, like "Done, it's open" or "Ten minutes, \
 starting now." If something's unclear, just ask.
+
+Memory: when the user explicitly asks you to remember something, call remember with a short \
+standalone fact. Don't save things on your own initiative. Whenever the user asks you to \
+forget, delete or stop remembering something, you MUST call the forget tool; saying you've \
+forgotten without calling it is a lie, because the memory stays saved. Use what you remember \
+naturally, without announcing it.
+
+{memory}
 
 Current date and time: {now}."""
 
@@ -37,14 +46,25 @@ class Brain:
         self.client = ollama.Client()
         self.history = []
 
-    def warm_up(self):
-        """Loads the model into VRAM and keeps it there."""
-        self.client.chat(model=config.OLLAMA_MODEL, messages=[{"role": "user", "content": "hi"}],
-                         think=False, keep_alive=-1, options={"num_ctx": config.NUM_CTX, "num_predict": 1})
+    def warm_up(self, wait=120):
+        """Loads the model into VRAM and keeps it there. At sign-in Ollama may still be
+        starting, so keep retrying for up to `wait` seconds."""
+        deadline = time.time() + wait
+        while True:
+            try:
+                self.client.chat(model=config.OLLAMA_MODEL, messages=[{"role": "user", "content": "hi"}],
+                                 think=False, keep_alive=-1,
+                                 options={"num_ctx": config.NUM_CTX, "num_predict": 1})
+                return
+            except ConnectionError:
+                if time.time() > deadline:
+                    raise
+                log.info("Waiting for Ollama to start...")
+                time.sleep(3)
 
     def _system(self):
         now = datetime.datetime.now().strftime("%A, %B %d %Y, %I:%M %p")
-        return {"role": "system", "content": SYSTEM_PROMPT.format(now=now)}
+        return {"role": "system", "content": SYSTEM_PROMPT.format(now=now, memory=tools.memory.prompt_block())}
 
     def _trim(self):
         if len(self.history) <= config.MAX_HISTORY:

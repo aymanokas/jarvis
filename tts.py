@@ -36,6 +36,7 @@ def clean(text):
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
     text = re.sub(r"https?://\S+", "", text)
     text = re.sub(r"[*_#`>|~]", "", text)
+    text = re.sub(r"[\U0001F000-\U0001FFFF☀-➿️‍]", "", text)  # emoji
     for pattern, repl in SPOKEN:
         text = re.sub(pattern, repl, text, flags=re.I)
     return " ".join(text.split())
