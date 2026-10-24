@@ -36,7 +36,7 @@ VOICE_LANG = "en-us"        # must match the voice: en-us for a*_ voices, en-gb 
 VOICE_SPEED = 1.0
 
 # --- Idle mode ---
-IDLE_AFTER_MINUTES = 10     # unload models from the GPU after this long unused; 0 = never
+IDLE_AFTER_MINUTES = 5      # unload models from the GPU after this long unused; 0 = never
 
 # --- Hotkey (works anywhere, same as clicking the orb) ---
 HOTKEY = "ctrl+alt+j"       # modifiers: ctrl, alt, shift, win; key: a-z, 0-9, f1-f12, space

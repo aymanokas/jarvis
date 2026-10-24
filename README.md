@@ -100,7 +100,7 @@ log. To launch it at sign-in, right-click the orb and tick **Start with Windows*
   instructions can't influence a later request.
 - **Apps close safely.** "Close Word" closes it like clicking X, so unsaved work triggers the
   usual save prompt. Force-closing only happens if you explicitly ask for it.
-- **Idle mode** unloads the models from the GPU after 10 minutes unused (`IDLE_AFTER_MINUTES`).
+- **Idle mode** unloads the models from the GPU after 5 minutes unused (`IDLE_AFTER_MINUTES`).
   The wake word, hotkey and reminders keep working, and models reload while you speak.
 - **The hotkey uses `RegisterHotKey`**, so Windows only reports that one key combination.
   JARVIS never sees anything else you type (unlike keyboard-hook libraries).
