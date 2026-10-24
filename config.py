@@ -24,7 +24,7 @@ WHISPER_MODEL = "small.en"  # tiny.en / base.en / small.en / medium.en / distil-
 
 # --- LLM ---
 OLLAMA_MODEL = "qwen3:8b"
-NUM_CTX = 4096              # keeps the model fully on an 8 GB GPU
+NUM_CTX = 8192              # fits on an 8 GB GPU with OLLAMA_KV_CACHE_TYPE=q8_0 (set by setup.ps1)
 TEMPERATURE = 0.6
 MAX_HISTORY = 20            # messages kept for conversation context
 
@@ -45,6 +45,17 @@ MAX_MEMORY_CHARS = 300
 # Personal data lives outside the repo so it can never be committed by accident.
 DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "Jarvis")
 os.makedirs(DATA_DIR, exist_ok=True)
-MEMORY_FILE = os.path.join(DATA_DIR, "memory.bin")   # encrypted with Windows DPAPI
+MEMORY_FILE = os.path.join(DATA_DIR, "memory.bin")       # encrypted with Windows DPAPI
+REMINDERS_FILE = os.path.join(DATA_DIR, "reminders.bin")  # encrypted
+SPOTIFY_TOKEN_FILE = os.path.join(DATA_DIR, "spotify.bin")  # encrypted
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")  # home city, Spotify client ID
 NOTES_FILE = os.path.join(DATA_DIR, "notes.txt")
 LOG_FILE = os.path.join(DATA_DIR, "jarvis.log")
+
+# --- Screen understanding ---
+VISION_MODEL = "qwen3-vl:4b"   # loaded only when asked to look, then unloaded
+VISION_MAX_SIDE = 1280         # screenshots are downscaled to this before analysis
+
+# --- Untrusted content limits (web, clipboard, files) ---
+MAX_READ_CHARS = 6000          # keeps documents inside the model's context window
+MISSED_REMINDER_HOURS = 12     # reminders missed while the PC was off are still announced

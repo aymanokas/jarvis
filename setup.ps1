@@ -19,12 +19,18 @@ foreach ($f in "kokoro-v1.0.onnx", "voices-v1.0.bin") {
 Write-Host "== Wake word model"
 .venv\Scripts\python.exe -c "import openwakeword.utils as u; u.download_models(['hey_jarvis'])"
 
-Write-Host "== Language model (Ollama)"
+Write-Host "== Language and vision models (Ollama)"
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollama) {
     winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements
     $ollama = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
 } else { $ollama = $ollama.Source }
 & $ollama pull qwen3:8b
+& $ollama pull qwen3-vl:4b
+
+# 8-bit KV cache halves context memory, so an 8K context fits on an 8 GB GPU.
+# Takes effect the next time Ollama starts (sign out and in, or restart Ollama).
+[Environment]::SetEnvironmentVariable("OLLAMA_FLASH_ATTENTION", "1", "User")
+[Environment]::SetEnvironmentVariable("OLLAMA_KV_CACHE_TYPE", "q8_0", "User")
 
 Write-Host "`nDone. Start JARVIS with run.bat"

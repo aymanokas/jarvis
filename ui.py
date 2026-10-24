@@ -44,6 +44,7 @@ class Bridge(QObject):
     state = Signal(str)
     user = Signal(str)
     reply = Signal(str)
+    notice = Signal(str, str)  # (title, text): reminders, connection results
 
 
 def _keep_topmost(widget):
@@ -249,7 +250,10 @@ class Card(QWidget):
 
 class Overlay:
     def __init__(self, on_click, on_pause_toggle, on_quit, level_fn,
-                 autostart_enabled, on_autostart_toggle, on_clear_memory, hotkey_label):
+                 autostart_enabled, on_autostart_toggle, on_clear_memory, hotkey_label,
+                 extra_actions=()):
+        """extra_actions: (label, callback) pairs added to the menu; callbacks run on the UI thread."""
+        self._extra_actions = extra_actions
         self.app = QApplication.instance() or QApplication([])
         self.app.setQuitOnLastWindowClosed(False)
         self._on_click = on_click
@@ -266,6 +270,7 @@ class Overlay:
         self.bridge.state.connect(self.set_state)
         self.bridge.user.connect(self._on_user)
         self.bridge.reply.connect(self._on_reply)
+        self.bridge.notice.connect(self._on_notice)
         self._reply_text = ""
 
         self.orb = Orb(self)
@@ -307,9 +312,17 @@ class Overlay:
         for a in (self.show_action, self.pause_action, autostart_action):
             self.menu.addAction(a)
         self.menu.addSeparator()
+        extras = []
+        for label, callback in self._extra_actions:
+            action = QAction(label)
+            action.triggered.connect(callback)
+            self.menu.addAction(action)
+            extras.append(action)
         self.menu.addAction(clear_action)
+        self.menu.addSeparator()
         self.menu.addAction(quit_action)
-        self._actions = (self.show_action, self.pause_action, autostart_action, clear_action, quit_action)
+        self._actions = (self.show_action, self.pause_action, autostart_action, clear_action,
+                         quit_action, *extras)
 
     def _confirm_clear_memory(self):
         answer = QMessageBox.question(
@@ -405,6 +418,15 @@ class Overlay:
                 self.linger.start()
         if state == "idle" and self._reply_text == "" and not self.card.you.text():
             self.card.fade_out()
+
+    def _on_notice(self, title, text):
+        self._reply_text = text
+        self.card.set_status(title.upper(), COLORS["thinking"])
+        self.card.set_text(you="", reply=text)
+        if self.show_action.isChecked():
+            self.place_card()
+            self.card.fade_in()
+        self.linger.start(max(CARD_LINGER_MS, 12000))
 
     def _on_user(self, text):
         self._reply_text = ""

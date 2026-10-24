@@ -10,6 +10,8 @@ PySide6-Essentials==6.12.0
 pycaw==20260927
 comtypes==1.4.17
 psutil==7.2.2
+pillow==13.0.0
+pypdf==6.21.2
 # CUDA libraries for Whisper on NVIDIA GPUs (it falls back to CPU without them)
 nvidia-cublas-cu12==12.9.2.10
 nvidia-cudnn-cu12==9.27.0.42

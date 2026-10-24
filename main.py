@@ -8,6 +8,7 @@ import ctypes
 import logging
 import logging.handlers
 import os
+import re
 import sys
 import threading
 import time
@@ -26,9 +27,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)
                     datefmt="%H:%M:%S", handlers=handlers)
 log = logging.getLogger("jarvis")
 
+# Without a console, uncaught errors (e.g. in menu actions) would vanish; log them instead.
+sys.excepthook = lambda *exc: log.error("Unhandled error", exc_info=exc)
+threading.excepthook = lambda args: log.error("Unhandled error in thread %s", args.thread.name,
+                                              exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+
 import audio  # noqa: E402
 import autostart  # noqa: E402
 import hotkey  # noqa: E402
+import securestore  # noqa: E402
+import spotify  # noqa: E402
 import tools  # noqa: E402
 from brain import Brain  # noqa: E402
 from stt import STT  # noqa: E402
@@ -71,9 +79,10 @@ class Jarvis:
         log.info("Ready in %.1fs. Say 'Hey Jarvis'.", time.time() - start)
 
     def announce(self, text):
+        """Timers and reminders: chime, show on the overlay and speak."""
         audio.chime((990, 990))
         time.sleep(0.25)
-        self.ui.reply.emit(text)
+        self.ui.notice.emit("Reminder" if text.startswith(("Reminder", "While")) else "JARVIS", text)
         self.tts.say(text)
 
     def run(self):
@@ -152,6 +161,64 @@ class Jarvis:
         return False
 
 
+SPOTIFY_HELP = """To connect Spotify (one time, about 2 minutes):
+
+1. Open developer.spotify.com/dashboard and log in.
+2. Click "Create app". Any name and description.
+3. Redirect URI: http://127.0.0.1:8888/callback  (click Add)
+4. Tick "Web API", accept the terms, Save.
+5. Copy the Client ID from the app's page and paste it below.
+
+No client secret is needed. Your browser will then ask you to approve access."""
+
+
+def ask_text(title, label, value=""):
+    """Text prompt that comes to the front. JARVIS has no main window, so a plain dialog can
+    open behind whatever app is focused."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QInputDialog
+    dialog = QInputDialog()
+    dialog.setWindowTitle(title)
+    dialog.setLabelText(label)
+    dialog.setTextValue(value)
+    dialog.setWindowFlag(Qt.WindowStaysOnTopHint)
+    dialog.resize(520, dialog.sizeHint().height())
+    dialog.show()
+    dialog.raise_()
+    dialog.activateWindow()
+    ok = dialog.exec() == QInputDialog.Accepted
+    return dialog.textValue(), ok
+
+
+def connect_spotify(bridge):
+    log.info("Connect Spotify dialog opened")
+    cid, ok = ask_text("Connect Spotify", SPOTIFY_HELP, spotify.client_id())
+    cid = cid.strip()
+    if not ok or not cid:
+        log.info("Connect Spotify cancelled")
+        return
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", cid):
+        bridge.notice.emit("Spotify", "That doesn't look like a Client ID (32 letters and digits).")
+        return
+    securestore.set_setting("spotify_client_id", cid)
+    bridge.notice.emit("Spotify", "Approve access in your browser...")
+
+    def done(success, message):
+        log.info("Spotify connect: %s", message)
+        bridge.notice.emit("Spotify", message)
+
+    spotify.connect(done)
+
+
+def set_home_city(bridge):
+    city, ok = ask_text(
+        "Home city", "City for weather when you don't name one\n(e.g. \"Casablanca\" or \"Paris, France\"):",
+        securestore.get_setting("home_city"))
+    if ok:
+        securestore.set_setting("home_city", " ".join(city.split())[:80])
+        bridge.notice.emit("Weather", f"Home city set to {city.strip()}." if city.strip() else "Home city cleared.")
+
+
 def already_running():
     """Named mutex so a second copy (e.g. autostart + manual launch) exits instead of
     fighting over the microphone. Kept alive for the life of the process."""
@@ -180,7 +247,9 @@ def main():
                       on_quit=lambda: os._exit(0), level_fn=jarvis.level,
                       autostart_enabled=autostart.is_enabled(), on_autostart_toggle=on_autostart,
                       on_clear_memory=tools.memory.clear,
-                      hotkey_label=config.HOTKEY.title() if hotkey_ok else "")
+                      hotkey_label=config.HOTKEY.title() if hotkey_ok else "",
+                      extra_actions=[("Connect Spotify...", lambda: connect_spotify(overlay.bridge)),
+                                     ("Set home city...", lambda: set_home_city(overlay.bridge))])
     jarvis.ui = overlay.bridge
     threading.Thread(target=jarvis.run, daemon=True).start()
     sys.exit(overlay.run())

@@ -21,21 +21,31 @@ def _add_cuda_dlls():
 
 
 _add_cuda_dlls()
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 from faster_whisper import WhisperModel  # noqa: E402
 
 # Phrases Whisper tends to invent from background noise.
 HALLUCINATIONS = {"", "you", "thank you", "thanks for watching", "bye", "thank you for watching"}
 
 
+def _load(**kwargs):
+    """Use the cached model without contacting the internet; download only the first time."""
+    try:
+        return WhisperModel(config.WHISPER_MODEL, local_files_only=True, **kwargs)
+    except Exception:
+        log.info("Whisper %s not cached yet, downloading", config.WHISPER_MODEL)
+        return WhisperModel(config.WHISPER_MODEL, **kwargs)
+
+
 class STT:
     def __init__(self):
         try:
-            self.model = WhisperModel(config.WHISPER_MODEL, device="cuda", compute_type="float16")
+            self.model = _load(device="cuda", compute_type="float16")
             list(self.model.transcribe(np.zeros(config.SAMPLE_RATE, np.float32))[0])  # forces cuDNN load
             self.device = "cuda"
         except Exception as e:
             log.warning("GPU whisper unavailable (%s), using CPU", e)
-            self.model = WhisperModel(config.WHISPER_MODEL, device="cpu", compute_type="int8", cpu_threads=8)
+            self.model = _load(device="cpu", compute_type="int8", cpu_threads=8)
             self.device = "cpu"
         log.info("Whisper %s loaded on %s", config.WHISPER_MODEL, self.device)
 
